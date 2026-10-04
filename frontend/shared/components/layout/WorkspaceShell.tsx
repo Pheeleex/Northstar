@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
-import { useDemoStore } from "@/lib/demo-store";
+import { useDemoStore } from "@/shared/stores/DemoStoreProvider";
 
 const navigation = [
   { label: "Dashboard", href: "/dashboard", icon: "grid" },
@@ -57,7 +57,7 @@ export default function WorkspaceShell({ children }: { children: React.ReactNode
         <header className="topbar">
           <button className="mobile-menu" aria-label="Open navigation" aria-expanded={menuOpen} onClick={() => setMenuOpen(true)}>☰</button>
           <div className="crumb">Workspace <span aria-hidden="true">/</span> <strong>{current?.label ?? "NorthStar"}</strong></div>
-          <div className="top-actions"><span className="demo-pill" title="Demo changes are stored in this browser">DEMO · LOCAL</span><div className="user-menu"><span className="user-avatar">{initials}</span><span className="user-copy"><label className="sr-only" htmlFor="demo-employee">Switch demo user</label><select id="demo-employee" className="persona-select" value={activeEmployee.id} onChange={(event) => setActiveEmployee(event.target.value)} aria-label="Switch demo user">{employees.map((employee) => <option key={employee.id} value={employee.id}>{employee.firstName} {employee.lastName}</option>)}</select><span className="user-role">{activeEmployee.role}</span></span></div></div>
+          <div className="top-actions"><span className="demo-pill" title="Demo changes are stored in this browser">DEMO · LOCAL</span><div className="user-menu"><span className="user-avatar">{initials}</span><span className="user-copy"><label className="sr-only" htmlFor="demo-employee">Switch demo user</label><select id="demo-employee" className="persona-select" value={activeEmployee.id} onChange={(event) => setActiveEmployee(event.target.value)} aria-label="Switch demo user">{employees.map((employee) => <option key={employee.id} value={employee.id}>{employee.displayName ?? `${employee.firstName} ${employee.lastName}`}</option>)}</select><span className="user-role">{activeEmployee.role}</span></span></div></div>
         </header>
         <main className="main-content">{children}</main>
       </div>

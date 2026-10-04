@@ -1,4 +1,4 @@
-import InventoryRegister from "@/components/inventory/InventoryRegister";
+import InventoryRegister from "@/features/inventory/components/InventoryRegister";
 
 export default function InventoryPage() {
   return <>
