@@ -156,6 +156,10 @@ export default function InventoryRegister() {
   if (!canAccessInventory) return <section className="panel access-notice"><h2 className="section-title">Inventory access is limited</h2><p className="section-note">Switch to an Inventory Admin or Warehouse Lead demo user to view inventory records.</p></section>;
 
   return <>
+    <div className="page-heading inventory-page-heading">
+      <div><div className="eyebrow">Stock control</div><h1>Inventory</h1><p className="subtitle">Keep a clear view of what is on hand, where it is stored, and what needs attention.</p></div>
+      <span className="date-label">{isWarehouseLead ? activeEmployee.warehouse : `${warehouses.length} active warehouses`}</span>
+    </div>
     <section className="inventory-summary" aria-label="Inventory summary">
       <div className="inventory-summary-card"><span>{isWarehouseLead ? "Items at this warehouse" : "Active items"}</span><strong>{visibleItems.length}</strong></div>
       <div className="inventory-summary-card"><span>Below reorder level</span><strong>{visibleItems.filter((item) => item.status === "Low stock").length}</strong></div>

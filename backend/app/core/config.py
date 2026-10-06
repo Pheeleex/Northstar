@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     database_url: str = (
         "postgresql+psycopg://northstar:northstar_local_dev_only@localhost:5432/northstar"
     )
+    cors_origins: list[str] = ["http://localhost:3000", "http://localhost:3001"]
 
 
 @lru_cache
