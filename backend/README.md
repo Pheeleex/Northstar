@@ -21,4 +21,4 @@ The backend uses PostgreSQL, SQLAlchemy 2, Psycopg 3, and Alembic. Run PostgreSQ
 
 The local database is named `northstar`. The Compose volume persists data across container restarts; `docker compose down -v` deletes that local data.
 
-The API allows the local frontend origins `http://localhost:3000` and `http://localhost:3001` by default. Override `CORS_ORIGINS` with a JSON array in `backend/.env` when the frontend runs elsewhere.
+Set `CORS_ORIGINS` in `backend/.env` to a JSON array containing the frontend origins that should be able to call the API. The checked-in `.env.example` leaves this list empty; local and deployed origins belong in each environment's own `.env` or environment settings.
