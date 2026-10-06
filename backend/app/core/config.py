@@ -1,5 +1,6 @@
 from functools import lru_cache
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -13,7 +14,7 @@ class Settings(BaseSettings):
     database_url: str = (
         "postgresql+psycopg://northstar:northstar_local_dev_only@localhost:5432/northstar"
     )
-    cors_origins: list[str] = ["http://localhost:3000", "http://localhost:3001"]
+    cors_origins: list[str] = Field(default_factory=list)
 
 
 @lru_cache
