@@ -17,7 +17,10 @@ The backend uses PostgreSQL, SQLAlchemy 2, Psycopg 3, and Alembic. Run PostgreSQ
 2. From this directory, copy `.env.example` to `.env`.
 3. Run `uv sync` to create the Python environment and lock the dependencies.
 4. Run `docker compose up -d db` to start the local database.
-5. Run `uv run alembic upgrade head` to create the inventory foundation tables.
+5. Run `uv run alembic upgrade head` to create or update the inventory tables.
+6. Run `uv run python -m app.seed_demo_data` to load the demo workspace, simulated users, warehouses, stock, movement history, and pending adjustment. The seed is additive and safe to rerun; it does not overwrite existing records.
+
+Start the API from this directory with `uv run fastapi dev`. The frontend uses `http://localhost:8000/api/v1` by default; set `NEXT_PUBLIC_API_BASE_URL` in the frontend environment when the API is hosted elsewhere.
 
 The local database is named `northstar`. The Compose volume persists data across container restarts; `docker compose down -v` deletes that local data.
 

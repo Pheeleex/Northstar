@@ -187,6 +187,7 @@ class WarehouseStock(Base):
     reorder_level: Mapped[Decimal] = mapped_column(
         Numeric(18, 3), nullable=False, server_default="0"
     )
+    is_quality_hold: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
     )
@@ -216,6 +217,7 @@ class InventoryAdjustment(Base):
         UniqueConstraint(
             "workspace_id", "warehouse_id", "product_id", "id", name="uq_inventory_adjustments_stock_scope_id"
         ),
+        UniqueConstraint("workspace_id", "reference_code", name="uq_inventory_adjustments_workspace_reference"),
         CheckConstraint("direction IN ('INCREASE', 'DECREASE')", name="direction_is_valid"),
         CheckConstraint("quantity > 0", name="quantity_is_positive"),
         CheckConstraint(
@@ -237,6 +239,7 @@ class InventoryAdjustment(Base):
     id: Mapped[UUID] = mapped_column(
         Uuid(as_uuid=True), primary_key=True, default=uuid4, server_default=text("gen_random_uuid()")
     )
+    reference_code: Mapped[str] = mapped_column(String(32), nullable=False)
     workspace_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
     warehouse_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
     product_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
