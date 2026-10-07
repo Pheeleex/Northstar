@@ -14,7 +14,7 @@ type DashboardProps = {
   warehouses: Warehouse[];
   items: InventoryItem[];
   adjustments: InventoryAdjustment[];
-  reviewAdjustment: (id: string, decision: Extract<AdjustmentStatus, "Approved" | "Returned">, note?: string) => boolean;
+  reviewAdjustment: (id: string, decision: Extract<AdjustmentStatus, "Approved" | "Returned">, note?: string) => Promise<boolean>;
 };
 
 function PageHeading({ eyebrow, title, subtitle, side }: { eyebrow: string; title: string; subtitle: string; side?: string }) {
@@ -211,14 +211,16 @@ function OperationsDashboard({ employee, items }: DashboardProps) {
 }
 
 export default function DashboardPage() {
-  const { activeEmployee, warehouses, inventoryItems, inventoryAdjustments, reviewInventoryAdjustment } = useDemoStore();
+  const { activeEmployee, warehouses, inventoryItems, inventoryAdjustments, inventoryLoading, inventoryError, refreshInventory, reviewInventoryAdjustment } = useDemoStore();
   const props: DashboardProps = {
     employee: activeEmployee,
     warehouses,
     items: inventoryItems,
     adjustments: inventoryAdjustments,
-    reviewAdjustment: (id, decision, note) => reviewInventoryAdjustment(id, decision, activeEmployee.displayName ?? `${activeEmployee.firstName} ${activeEmployee.lastName}`, note),
+    reviewAdjustment: (id, decision, note) => reviewInventoryAdjustment(id, decision, activeEmployee.id, note),
   };
+  if (inventoryLoading) return <section className="panel access-notice"><h2 className="section-title">Loading workspace data</h2><p className="section-note">Connecting to the inventory database…</p></section>;
+  if (inventoryError) return <section className="panel access-notice"><h2 className="section-title">Could not load workspace data</h2><p className="section-note">{inventoryError}</p><button className="button-secondary" type="button" onClick={() => void refreshInventory()}>Retry</button></section>;
   switch (activeEmployee.role) {
     case "Inventory Admin": return <InventoryAdminDashboard {...props}/>;
     case "Warehouse Lead": return <WarehouseLeadDashboard {...props}/>;

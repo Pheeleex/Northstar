@@ -20,7 +20,7 @@ export default function InventoryRegister() {
   const [activeView, setActiveView] = useState<"items" | "movements" | "warehouses">("items");
   const [movementWarehouse, setMovementWarehouse] = useState("All warehouses");
   const [formError, setFormError] = useState("");
-  const { activeEmployee, employees, warehouses, inventoryItems, inventoryAdjustments, inventoryMovements, addWarehouse, addInventoryItem, submitInventoryAdjustment } = useDemoStore();
+  const { activeEmployee, employees, warehouses, inventoryItems, inventoryAdjustments, inventoryMovements, inventoryLoading, inventoryError, refreshInventory, addWarehouse, addInventoryItem, submitInventoryAdjustment } = useDemoStore();
   const isAdmin = activeEmployee.role === "Inventory Admin";
   const isWarehouseLead = activeEmployee.role === "Warehouse Lead";
   const canAccessInventory = isAdmin || isWarehouseLead;
@@ -65,7 +65,7 @@ export default function InventoryRegister() {
     return matchesQuery && matchesStatus;
   }), [visibleItems, search, filter]);
 
-  function addItem(event: FormEvent<HTMLFormElement>) {
+  async function addItem(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     const onHand = Number(form.get("onHand"));
@@ -91,7 +91,7 @@ export default function InventoryRegister() {
       setFormError(`Item code ${code} must use the same name, category, and unit in every warehouse.`);
       return;
     }
-    if (!addInventoryItem(item)) {
+    if (!await addInventoryItem(item)) {
       setFormError("This item could not be added. Check its code and warehouse, then try again.");
       return;
     }
@@ -101,17 +101,17 @@ export default function InventoryRegister() {
     setFilter("All items");
   }
 
-  function createWarehouse(event: FormEvent<HTMLFormElement>) {
+  async function createWarehouse(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     const name = String(form.get("name")).trim();
     const code = String(form.get("code")).trim().toUpperCase();
     const warehouse: Warehouse = {
-      id: `warehouse-${code.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`,
+      id: "",
       code,
       name,
     };
-    if (!addWarehouse(warehouse)) {
+    if (!await addWarehouse(warehouse)) {
       setFormError("A warehouse with that name or code already exists. Choose a different one.");
       return;
     }
@@ -119,7 +119,7 @@ export default function InventoryRegister() {
     setFormError("");
   }
 
-  function submitAdjustment(event: FormEvent<HTMLFormElement>) {
+  async function submitAdjustment(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     const itemLocation = String(form.get("itemLocation"));
@@ -134,7 +134,7 @@ export default function InventoryRegister() {
       setFormError(`This item only has ${item.onHand.toLocaleString()} ${item.unit} on hand.`);
       return;
     }
-    const success = submitInventoryAdjustment({
+    const success = await submitInventoryAdjustment({
       itemCode: item.code,
       itemName: item.name,
       warehouse: item.warehouse,
@@ -166,6 +166,8 @@ export default function InventoryRegister() {
       <div className="inventory-summary-card"><span>On quality hold</span><strong>{visibleItems.filter((item) => item.status === "Quality hold").length}</strong></div>
     </section>
     <section className="panel inventory-panel">
+      {inventoryLoading && <p className="section-note" role="status">Loading inventory from the database…</p>}
+      {inventoryError && <div className="form-error" role="alert">{inventoryError} <button className="button-secondary button-small" type="button" onClick={() => void refreshInventory()}>Retry</button></div>}
       <div className="section-head"><div><h2 className="section-title">{activeView === "items" ? "Item register" : activeView === "movements" ? "Stock movements" : "Warehouses"}</h2><p className="section-note">{activeView === "items" ? `Showing ${filteredItems.length} of ${visibleItems.length} items${isWarehouseLead && activeEmployee.warehouse ? ` · ${activeEmployee.warehouse}` : ""}` : activeView === "movements" ? "Review quantity changes with their warehouse, reference, and running balance." : `${warehouseRows.length} ${warehouseRows.length === 1 ? "warehouse" : "warehouses"} in this workspace.`}</p></div>
         <div className="register-actions">{canSubmitAdjustment && activeView === "items" && <button className="button-secondary" type="button" onClick={() => { setFormError(""); setShowAdjustmentForm(true); }}>Request adjustment</button>}{isAdmin && activeView === "items" && <button className="button-primary" type="button" onClick={() => { setFormError(""); setShowItemForm(true); }}><span aria-hidden="true">＋</span> Add item</button>}{isAdmin && activeView === "warehouses" && <button className="button-primary" type="button" onClick={() => { setFormError(""); setShowWarehouseForm(true); }}><span aria-hidden="true">＋</span> Add warehouse</button>}</div>
       </div>
@@ -200,7 +202,7 @@ export default function InventoryRegister() {
       </tbody></table></div>
     </section>
 
-    {showItemForm && <div className="dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowItemForm(false); }}><section className="dialog" role="dialog" aria-modal="true" aria-labelledby="add-item-title"><div className="dialog-head"><div><h2 id="add-item-title">Add inventory item</h2><p>This change is saved only in this browser’s demo store.</p></div><button type="button" className="dialog-close" aria-label="Close" onClick={() => setShowItemForm(false)}>×</button></div><form className="item-form" onSubmit={addItem}>
+    {showItemForm && <div className="dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowItemForm(false); }}><section className="dialog" role="dialog" aria-modal="true" aria-labelledby="add-item-title"><div className="dialog-head"><div><h2 id="add-item-title">Add inventory item</h2><p>This item and its opening balance are saved to the workspace database.</p></div><button type="button" className="dialog-close" aria-label="Close" onClick={() => setShowItemForm(false)}>×</button></div><form className="item-form" onSubmit={addItem}>
       <label>Item name<input name="name" required placeholder="e.g. Raw cocoa beans" autoFocus/></label>
       <div className="form-row"><label>Item code<input name="code" required placeholder="e.g. RM-014"/></label><label>Category<select name="category"><option>Raw material</option><option>Packaging</option><option>Finished goods</option><option>Consumables</option></select></label></div>
       <div className="form-row"><label>Quantity on hand<input name="onHand" type="number" min="0" step="any" required placeholder="0"/></label><label>Unit<input name="unit" required placeholder="kg, L, pcs"/></label></div>
@@ -208,7 +210,7 @@ export default function InventoryRegister() {
       {formError && <p className="form-error" role="alert">{formError}</p>}<div className="dialog-actions"><button className="button-secondary" type="button" onClick={() => setShowItemForm(false)}>Cancel</button><button className="button-primary" type="submit">Add to register</button></div>
     </form></section></div>}
 
-    {showWarehouseForm && <div className="dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowWarehouseForm(false); }}><section className="dialog" role="dialog" aria-modal="true" aria-labelledby="add-warehouse-title"><div className="dialog-head"><div><h2 id="add-warehouse-title">Add warehouse</h2><p>It will be available in the item register and saved to this browser’s demo store.</p></div><button type="button" className="dialog-close" aria-label="Close" onClick={() => setShowWarehouseForm(false)}>×</button></div><form className="item-form" onSubmit={createWarehouse}>
+    {showWarehouseForm && <div className="dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowWarehouseForm(false); }}><section className="dialog" role="dialog" aria-modal="true" aria-labelledby="add-warehouse-title"><div className="dialog-head"><div><h2 id="add-warehouse-title">Add warehouse</h2><p>The new location is saved to the workspace database.</p></div><button type="button" className="dialog-close" aria-label="Close" onClick={() => setShowWarehouseForm(false)}>×</button></div><form className="item-form" onSubmit={createWarehouse}>
       <label>Warehouse name<input name="name" required maxLength={60} placeholder="e.g. Abuja Warehouse" autoFocus/></label>
       <label>Warehouse code<input name="code" required maxLength={12} pattern="[A-Za-z0-9-]+" title="Use letters, numbers, and hyphens only" placeholder="e.g. ABJ-01"/></label>
       {formError && <p className="form-error" role="alert">{formError}</p>}<div className="dialog-actions"><button className="button-secondary" type="button" onClick={() => setShowWarehouseForm(false)}>Cancel</button><button className="button-primary" type="submit">Add warehouse</button></div>
