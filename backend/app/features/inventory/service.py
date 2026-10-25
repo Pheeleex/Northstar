@@ -1,14 +1,15 @@
-"""Inventory queries and transaction boundaries."""
+"""Inventory write operations and transaction boundaries."""
 
 from datetime import datetime, timezone
 from decimal import Decimal
 from uuid import UUID, uuid4
 
-from sqlalchemy import and_, select
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.demo_workspace import DEMO_WORKSPACE_ID
+from app.features.inventory.constants import ADJUSTMENT_REASON_CODES
 from app.features.inventory.models import (
     InventoryAdjustment,
     InventoryMovement,
@@ -17,7 +18,6 @@ from app.features.inventory.models import (
     Warehouse,
     WarehouseAssignment,
     WarehouseStock,
-    Workspace,
     WorkspaceMembership,
 )
 
@@ -27,35 +27,6 @@ class InventoryServiceError(Exception):
         self.status_code = status_code
         self.detail = detail
         super().__init__(detail)
-
-
-MOVEMENT_LABELS = {
-    "OPENING_STOCK": "Opening stock",
-    "SUPPLIER_RECEIPT": "Supplier receipt",
-    "CUSTOMER_RETURN": "Customer return",
-    "TRANSFER": "Transfer",
-    "PRODUCTION_USE": "Production use",
-    "CUSTOMER_DISPATCH": "Customer dispatch",
-    "WRITE_OFF": "Write-off",
-    "COUNT_VARIANCE": "Count variance",
-    "DAMAGE_OR_SPOILAGE": "Damage or spoilage",
-    "RECEIVING_CORRECTION": "Receiving correction",
-    "EXPIRY": "Expiry",
-    "OTHER": "Other",
-}
-ADJUSTMENT_REASON_CODES = {
-    "Count variance": "COUNT_VARIANCE",
-    "Damage or spoilage": "DAMAGE_OR_SPOILAGE",
-    "Receiving correction": "RECEIVING_CORRECTION",
-    "Expiry": "EXPIRY",
-    "Other": "OTHER",
-}
-ADJUSTMENT_REASON_LABELS = {value: key for key, value in ADJUSTMENT_REASON_CODES.items()}
-STATUS_LABELS = {
-    "PENDING_REVIEW": "Pending review",
-    "APPROVED": "Approved",
-    "RETURNED": "Returned",
-}
 
 
 def _actor(session: Session, demo_key: str, allowed_roles: set[str] | None = None) -> tuple[User, WorkspaceMembership]:
@@ -89,129 +60,8 @@ def _warehouse(session: Session, warehouse_id: UUID) -> Warehouse:
     return warehouse
 
 
-def _status(stock: WarehouseStock) -> str:
-    if stock.is_quality_hold:
-        return "Quality hold"
-    if stock.on_hand_quantity < stock.reorder_level:
-        return "Low stock"
-    return "Healthy"
-
-
-def get_inventory_bootstrap(session: Session) -> dict[str, list[dict[str, object]]]:
-    workspace = session.get(Workspace, DEMO_WORKSPACE_ID)
-    if workspace is None:
-        return {"warehouses": [], "items": [], "movements": [], "adjustments": []}
-
-    warehouses = session.scalars(
-        select(Warehouse)
-        .where(Warehouse.workspace_id == DEMO_WORKSPACE_ID, Warehouse.is_active.is_(True))
-        .order_by(Warehouse.name)
-    ).all()
-    warehouse_by_id = {warehouse.id: warehouse for warehouse in warehouses}
-
-    stock_rows = session.execute(
-        select(WarehouseStock, Product)
-        .join(
-            Product,
-            and_(
-                Product.id == WarehouseStock.product_id,
-                Product.workspace_id == WarehouseStock.workspace_id,
-            ),
-        )
-        .where(WarehouseStock.workspace_id == DEMO_WORKSPACE_ID)
-        .order_by(Product.name, WarehouseStock.warehouse_id)
-    ).all()
-    items = [
-        {
-            "code": product.sku,
-            "name": product.name,
-            "category": product.category,
-            "onHand": float(stock.on_hand_quantity),
-            "unit": product.base_unit,
-            "reorderAt": float(stock.reorder_level),
-            "warehouse": warehouse_by_id[stock.warehouse_id].name,
-            "status": _status(stock),
-        }
-        for stock, product in stock_rows
-        if stock.warehouse_id in warehouse_by_id
-    ]
-
-    memberships = session.scalars(
-        select(WorkspaceMembership).where(WorkspaceMembership.workspace_id == DEMO_WORKSPACE_ID)
-    ).all()
-    users = session.scalars(select(User)).all()
-    user_by_id = {user.id: user for user in users}
-    actor_name_by_membership = {
-        membership.id: user_by_id[membership.user_id].display_name
-        for membership in memberships
-        if membership.user_id in user_by_id
-    }
-    demo_key_by_membership = {
-        membership.id: user_by_id[membership.user_id].demo_key
-        for membership in memberships
-        if membership.user_id in user_by_id
-    }
-    product_by_id = {product.id: product for product in session.scalars(select(Product)).all()}
-
-    movement_rows = session.scalars(
-        select(InventoryMovement)
-        .where(InventoryMovement.workspace_id == DEMO_WORKSPACE_ID)
-        .order_by(InventoryMovement.recorded_at.desc(), InventoryMovement.id.desc())
-    ).all()
-    movements = [
-        {
-            "id": f"MOV-{movement.id.hex[:10].upper()}",
-            "itemCode": product_by_id[movement.product_id].sku,
-            "itemName": product_by_id[movement.product_id].name,
-            "warehouse": warehouse_by_id[movement.warehouse_id].name,
-            "type": movement.movement_type,
-            "reason": MOVEMENT_LABELS[movement.reason_code],
-            "quantity": float(movement.quantity_delta),
-            "balanceAfter": float(movement.balance_after),
-            "reference": movement.reference_code,
-            "performedBy": actor_name_by_membership.get(movement.recorded_by_membership_id, "Unknown user"),
-            "occurredAt": movement.recorded_at.isoformat(),
-        }
-        for movement in movement_rows
-        if movement.product_id in product_by_id and movement.warehouse_id in warehouse_by_id
-    ]
-
-    adjustment_rows = session.scalars(
-        select(InventoryAdjustment)
-        .where(InventoryAdjustment.workspace_id == DEMO_WORKSPACE_ID)
-        .order_by(InventoryAdjustment.created_at.desc(), InventoryAdjustment.id.desc())
-    ).all()
-    adjustments = [
-        {
-            "id": adjustment.reference_code,
-            "itemCode": product_by_id[adjustment.product_id].sku,
-            "itemName": product_by_id[adjustment.product_id].name,
-            "warehouse": warehouse_by_id[adjustment.warehouse_id].name,
-            "direction": adjustment.direction.title(),
-            "quantity": float(adjustment.quantity),
-            "reason": ADJUSTMENT_REASON_LABELS[adjustment.reason_code],
-            "notes": adjustment.notes,
-            "requestedById": demo_key_by_membership.get(adjustment.requested_by_membership_id, ""),
-            "requestedBy": actor_name_by_membership.get(adjustment.requested_by_membership_id, "Unknown user"),
-            "requestedAt": adjustment.created_at.isoformat(),
-            "status": STATUS_LABELS[adjustment.status],
-            "reviewedBy": actor_name_by_membership.get(adjustment.reviewed_by_membership_id),
-            "reviewedAt": adjustment.reviewed_at.isoformat() if adjustment.reviewed_at else None,
-            "reviewNote": adjustment.review_note,
-        }
-        for adjustment in adjustment_rows
-        if adjustment.product_id in product_by_id and adjustment.warehouse_id in warehouse_by_id
-    ]
-
-    return {
-        "warehouses": [
-            {"id": str(warehouse.id), "code": warehouse.code, "name": warehouse.name}
-            for warehouse in warehouses
-        ],
-        "items": items,
-        "movements": movements,
-        "adjustments": adjustments,
-    }
+def _opening_stock_reference(sku: str, warehouse_code: str) -> str:
+    return f"OPEN-{sku[:32]}-{warehouse_code[:12]}"
 
 
 def create_warehouse(session: Session, *, actor_id: str, code: str, name: str) -> None:
@@ -238,10 +88,10 @@ def create_inventory_item(
     category: str,
     unit: str,
     warehouse_id: UUID,
-    on_hand: Decimal,
+    opening_stock: Decimal,
     reorder_at: Decimal,
 ) -> None:
-    _actor(session, actor_id, {"INVENTORY_ADMIN"})
+    _, membership = _actor(session, actor_id, {"INVENTORY_ADMIN"})
     warehouse = _warehouse(session, warehouse_id)
     sku = code.strip().upper()
     product = session.scalar(
@@ -278,13 +128,12 @@ def create_inventory_item(
         workspace_id=DEMO_WORKSPACE_ID,
         warehouse_id=warehouse.id,
         product_id=product.id,
-        on_hand_quantity=on_hand,
+        on_hand_quantity=opening_stock,
         reorder_level=reorder_at,
     )
     session.add(stock)
     session.flush()
-    if on_hand > 0:
-        membership = _actor(session, actor_id)[1]
+    if opening_stock > 0:
         session.add(
             InventoryMovement(
                 workspace_id=DEMO_WORKSPACE_ID,
@@ -292,13 +141,81 @@ def create_inventory_item(
                 product_id=product.id,
                 movement_type="IN",
                 reason_code="OPENING_STOCK",
-                quantity_delta=on_hand,
-                balance_after=on_hand,
-                reference_code=f"OPEN-{sku}",
+                quantity_delta=opening_stock,
+                balance_after=opening_stock,
+                reference_code=_opening_stock_reference(product.sku, warehouse.code),
                 recorded_by_membership_id=membership.id,
+                recorded_at=datetime.now(timezone.utc),
             )
         )
     session.commit()
+
+
+def set_opening_stock(
+    session: Session,
+    *,
+    actor_id: str,
+    item_code: str,
+    warehouse_id: UUID,
+    quantity: Decimal,
+    reference_code: str | None,
+) -> None:
+    _, membership = _actor(session, actor_id, {"INVENTORY_ADMIN"})
+    warehouse = _warehouse(session, warehouse_id)
+    product = session.scalar(
+        select(Product).where(
+            Product.workspace_id == DEMO_WORKSPACE_ID,
+            Product.sku == item_code.strip().upper(),
+        )
+    )
+    if product is None:
+        raise InventoryServiceError(404, "Inventory item was not found.")
+    stock = session.scalar(
+        select(WarehouseStock)
+        .where(
+            WarehouseStock.workspace_id == DEMO_WORKSPACE_ID,
+            WarehouseStock.warehouse_id == warehouse.id,
+            WarehouseStock.product_id == product.id,
+        )
+        .with_for_update()
+    )
+    if stock is None:
+        raise InventoryServiceError(404, "This item has no stock record at the selected warehouse.")
+    if stock.on_hand_quantity != 0:
+        raise InventoryServiceError(409, "Opening stock can only be set before stock changes begin.")
+    has_movements = session.scalar(
+        select(InventoryMovement.id)
+        .where(
+            InventoryMovement.workspace_id == DEMO_WORKSPACE_ID,
+            InventoryMovement.warehouse_id == warehouse.id,
+            InventoryMovement.product_id == product.id,
+        )
+        .limit(1)
+    )
+    if has_movements is not None:
+        raise InventoryServiceError(409, "Opening stock has already been recorded for this item and warehouse.")
+
+    recorded_at = datetime.now(timezone.utc)
+    stock.on_hand_quantity = quantity
+    session.add(
+        InventoryMovement(
+            workspace_id=DEMO_WORKSPACE_ID,
+            warehouse_id=warehouse.id,
+            product_id=product.id,
+            movement_type="IN",
+            reason_code="OPENING_STOCK",
+            quantity_delta=quantity,
+            balance_after=quantity,
+            reference_code=reference_code.strip() if reference_code and reference_code.strip() else _opening_stock_reference(product.sku, warehouse.code),
+            recorded_by_membership_id=membership.id,
+            recorded_at=recorded_at,
+        )
+    )
+    try:
+        session.commit()
+    except IntegrityError as error:
+        session.rollback()
+        raise InventoryServiceError(409, "Opening stock was already set for this item and warehouse.") from error
 
 
 def create_adjustment(

@@ -9,6 +9,7 @@ export type InventoryItem = {
   reorderAt: number;
   warehouse: string;
   status: InventoryStatus;
+  canSetOpeningStock?: boolean;
 };
 
 export type Warehouse = {
