@@ -32,8 +32,15 @@ class InventoryItemCreate(DemoActorPayload):
     category: str = Field(min_length=1, max_length=80)
     unit: str = Field(min_length=1, max_length=16)
     warehouse_id: UUID
-    on_hand: Decimal = Field(ge=0, max_digits=18, decimal_places=3)
+    opening_stock: Decimal = Field(default=Decimal("0"), ge=0, max_digits=18, decimal_places=3)
     reorder_at: Decimal = Field(ge=0, max_digits=18, decimal_places=3)
+
+
+class OpeningStockCreate(DemoActorPayload):
+    item_code: str = Field(min_length=1, max_length=64)
+    warehouse_id: UUID
+    quantity: Decimal = Field(gt=0, max_digits=18, decimal_places=3)
+    reference_code: str | None = Field(default=None, max_length=80)
 
 
 class InventoryAdjustmentCreate(DemoActorPayload):

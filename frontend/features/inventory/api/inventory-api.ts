@@ -32,8 +32,11 @@ export const inventoryApi = {
     request<{ ok: true }>("/inventory/warehouses", { method: "POST", body: JSON.stringify(payload) }),
   addItem: (payload: {
     actor_id: string; code: string; name: string; category: string; unit: string;
-    warehouse_id: string; on_hand: number; reorder_at: number;
+    warehouse_id: string; opening_stock?: number; reorder_at: number;
   }) => request<{ ok: true }>("/inventory/items", { method: "POST", body: JSON.stringify(payload) }),
+  setOpeningStock: (payload: {
+    actor_id: string; item_code: string; warehouse_id: string; quantity: number; reference_code?: string;
+  }) => request<{ ok: true }>("/inventory/opening-stock", { method: "POST", body: JSON.stringify(payload) }),
   submitAdjustment: (payload: {
     actor_id: string; item_code: string; warehouse_id: string;
     direction: "Increase" | "Decrease"; quantity: number;

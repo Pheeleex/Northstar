@@ -8,15 +8,17 @@ from app.features.inventory.schemas import (
     InventoryAdjustmentCreate,
     InventoryAdjustmentReview,
     InventoryItemCreate,
+    OpeningStockCreate,
     WarehouseCreate,
 )
+from app.features.inventory.queries import get_inventory_bootstrap
 from app.features.inventory.service import (
     InventoryServiceError,
     create_adjustment,
     create_inventory_item,
     create_warehouse,
-    get_inventory_bootstrap,
     review_adjustment,
+    set_opening_stock,
 )
 
 router = APIRouter(prefix="/inventory", tags=["inventory"])
@@ -47,8 +49,24 @@ def add_inventory_item(payload: InventoryItemCreate, session: Session = Depends(
             category=payload.category,
             unit=payload.unit,
             warehouse_id=payload.warehouse_id,
-            on_hand=payload.on_hand,
+            opening_stock=payload.opening_stock,
             reorder_at=payload.reorder_at,
+        )
+        return {"ok": True}
+    except InventoryServiceError as error:
+        raise HTTPException(error.status_code, error.detail) from error
+
+
+@router.post("/opening-stock", status_code=201)
+def add_opening_stock(payload: OpeningStockCreate, session: Session = Depends(get_db_session)):
+    try:
+        set_opening_stock(
+            session,
+            actor_id=payload.actor_id,
+            item_code=payload.item_code,
+            warehouse_id=payload.warehouse_id,
+            quantity=payload.quantity,
+            reference_code=payload.reference_code,
         )
         return {"ok": True}
     except InventoryServiceError as error:

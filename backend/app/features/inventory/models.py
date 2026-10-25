@@ -318,6 +318,14 @@ class InventoryMovement(Base):
         CheckConstraint("balance_after >= 0", name="balance_after_is_nonnegative"),
         Index("ix_inventory_movements_workspace_warehouse_recorded", "workspace_id", "warehouse_id", "recorded_at"),
         Index("ix_inventory_movements_workspace_product_recorded", "workspace_id", "product_id", "recorded_at"),
+        Index(
+            "uq_inventory_movements_one_opening_stock",
+            "workspace_id",
+            "warehouse_id",
+            "product_id",
+            unique=True,
+            postgresql_where=text("reason_code = 'OPENING_STOCK'"),
+        ),
     )
 
     id: Mapped[UUID] = mapped_column(

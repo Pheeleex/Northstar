@@ -8,6 +8,8 @@ The frontend is a Next.js App Router application for the NorthStar operations wo
 - `features/workspace/data/` provides the simulated users for the persona switcher. Procurement, warehouse, quality, and dashboard sample records remain in their own feature `data/` folders.
 - Run `uv run python -m app.seed_demo_data` from `backend/` after applying migrations to populate the demo workspace. The seed is additive and safe to rerun.
 - Inventory Admin can add warehouses and items. Warehouse Leads can submit reasoned adjustment requests. Inventory Admin review posts approved adjustments to the movement ledger; pending and returned requests do not change stock.
+- Movement history is a read-only ledger in the Inventory feature. Source workflows create movement records as part of their transactions; there is no generic movement-entry form.
+- Item setup can optionally include the initial quantity at its selected warehouse. A positive opening quantity creates an `IN / Opening stock` ledger entry in the same transaction; if left blank or zero, Inventory Admin can set it later through the separate one-time opening-stock action. Adjustments remain a separate review process.
 - Movement types are fixed as `IN`, `OUT`, and `ADJUSTMENT`; a predefined reason records why stock changed. There is no free-text movement description.
 - Products are workspace scoped and stock balances are warehouse scoped, so the same SKU can be viewed at each location and aggregated across warehouses.
 - The Inventory page provides item, movement, and warehouse views. Warehouse Leads see their assigned warehouse; Inventory Admin sees all workspace locations.
